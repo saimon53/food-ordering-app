@@ -46,3 +46,15 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+# Android Release Signing - Keep secrets out of GitHub
+/android/key.properties
+*.jks
+*.keystore
+# Firebase private credentials
+**/service-account*.json
+**/*serviceAccount*.json
+
+# Environment secrets
+.env
+.env.*
+!.env.example

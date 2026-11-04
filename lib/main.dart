@@ -10,6 +10,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'auth_screens.dart';
 import 'order_history_screen.dart';
+import 'order_tracking_screen.dart';
+import 'customer_reviews_screen.dart';
+import 'notification_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,9 +31,44 @@ class FoodOrderingApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Foodie',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFF6B35),
+          primary: const Color(0xFFFF6B35),
+          surface: Colors.white,
+        ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFFFFBF7),
+        scaffoldBackgroundColor: const Color(0xFFFFF8F2),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF292522),
+          elevation: 0,
+          centerTitle: false,
+          titleTextStyle: TextStyle(
+            color: Color(0xFF292522),
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFFFE2D4)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 1.5),
+          ),
+        ),
       ),
       home: const AuthGate(),
     );
@@ -282,6 +320,13 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void openNotifications() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NotificationScreen()),
+    );
+  }
+
   Future<void> logout() async {
     try {
       await FirebaseAuth.instance.signOut();
@@ -305,14 +350,34 @@ class _MainScreenState extends State<MainScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Foodie',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.deepOrange,
-          ),
+        title: const Row(
+          children: [
+            Icon(Icons.restaurant_menu, color: Color(0xFFFF6B35)),
+            SizedBox(width: 8),
+            Text('Foodie'),
+          ],
         ),
         actions: [
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(user?.uid ?? '')
+                .collection('notifications')
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final count = snapshot.data?.docs.length ?? 0;
+              return IconButton(
+                tooltip: 'Notifications',
+                onPressed: openNotifications,
+                icon: Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: const Icon(Icons.notifications_none),
+                ),
+              );
+            },
+          ),
           IconButton(
             tooltip: 'My Favorite Foods',
             icon: const Icon(Icons.favorite_border, color: Colors.red),
@@ -393,18 +458,46 @@ class _MainScreenState extends State<MainScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFF8A50), Color(0xFFFF6B35)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Good food, good mood!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'Find your favourite meal today.',
+                    style: TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
             child: TextField(
               onChanged: (value) => setState(() => searchQuery = value),
               decoration: InputDecoration(
                 hintText: 'Search your favourite food...',
                 prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
+                border: InputBorder.none,
               ),
             ),
           ),
@@ -590,7 +683,12 @@ class FoodCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: 2,
+      margin: EdgeInsets.zero,
       color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Color(0xFFFFE9DF)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -599,7 +697,10 @@ class FoodCard extends StatelessWidget {
               width: double.infinity,
               child: InkWell(
                 onTap: onTap,
-                child: FoodImage(image: food.image),
+                child: Hero(
+                  tag: 'food-image-${food.id}',
+                  child: FoodImage(image: food.image),
+                ),
               ),
             ),
           ),
@@ -672,46 +773,179 @@ class FoodDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Food Details')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: FoodImage(
-              image: food.image,
-              height: 250,
-              width: double.infinity,
+      backgroundColor: const Color(0xFFFFF8F2),
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 300,
+            pinned: true,
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF292522),
+            title: const Text('Food Details'),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Hero(
+                    tag: 'food-image-${food.id}',
+                    child: FoodImage(
+                      image: food.image,
+                      width: double.infinity,
+                      height: 300,
+                    ),
+                  ),
+                  Positioned(
+                    left: 16,
+                    bottom: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.65),
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Text(
+                        food.category,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 18),
-          Text(
-            food.name,
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '৳${food.price.toStringAsFixed(0)}',
-            style: const TextStyle(
-              color: Colors.deepOrange,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 20, 18, 110),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          food.name,
+                          style: const TextStyle(
+                            fontSize: 27,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF292522),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '৳${food.price.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 23,
+                          color: Color(0xFFFF6B35),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.restaurant_menu,
+                        color: Color(0xFFFF6B35),
+                        size: 19,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        food.category,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      const Icon(
+                        Icons.local_dining,
+                        color: Color(0xFFFF6B35),
+                        size: 19,
+                      ),
+                      const SizedBox(width: 7),
+                      const Text(
+                        'Freshly prepared',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Description',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    food.description.trim().isEmpty
+                        ? 'No description is available for this food yet.'
+                        : food.description,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.6,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFFE2D4)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Color(0xFFFF6B35)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Add this item to your cart and continue to checkout when you are ready.',
+                            style: TextStyle(height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  CustomerReviewsSection(foodId: food.id),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          Chip(label: Text(food.category)),
-          const SizedBox(height: 12),
-          Text(food.description, style: const TextStyle(fontSize: 16)),
-          const SizedBox(height: 24),
-          FilledButton.icon(
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: SizedBox(
+          height: 54,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B35),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
             onPressed: () {
               onAddToCart();
               Navigator.pop(context);
             },
             icon: const Icon(Icons.add_shopping_cart),
-            label: const Text('Add to Cart'),
+            label: Text(
+              'Add to Cart • ৳${food.price.toStringAsFixed(0)}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -742,92 +976,167 @@ class CartScreen extends StatelessWidget {
       0,
       (sum, item) => sum + item.food.price * item.quantity,
     );
+    const deliveryFee = 50.0;
+    final total = subtotal + (items.isEmpty ? 0 : deliveryFee);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Cart')),
+      appBar: AppBar(
+        title: const Text('My Cart'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Text(
+                '${items.length} items',
+                style: const TextStyle(
+                  color: Colors.deepOrange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: items.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.shopping_cart_outlined,
-                    size: 70,
-                    color: Colors.grey,
-                  ),
-                  SizedBox(height: 12),
-                  Text('Your cart is empty', style: TextStyle(fontSize: 18)),
-                ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(25),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.shade50,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 64,
+                        color: Colors.deepOrange,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Your cart is empty',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Add your favourite food and it will appear here.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 18),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.restaurant_menu),
+                      label: const Text('Explore Food'),
+                    ),
+                  ],
+                ),
               ),
             )
           : Column(
               children: [
                 Expanded(
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                     itemCount: items.length,
                     itemBuilder: (context, index) {
                       final item = items[index];
-                      return Card(
-                        color: Colors.white,
-                        margin: const EdgeInsets.only(bottom: 12),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFFFE4D8)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.035),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
                         child: Padding(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(11),
                           child: Row(
                             children: [
                               ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(14),
                                 child: FoodImage(
                                   image: item.food.image,
-                                  height: 85,
-                                  width: 85,
+                                  height: 104,
+                                  width: 104,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 13),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       item.food.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
                                     ),
+                                    const SizedBox(height: 4),
                                     Text(
-                                      '৳${item.food.price.toStringAsFixed(0)} each',
-                                    ),
-                                    Text(
-                                      'Subtotal: ৳${(item.food.price * item.quantity).toStringAsFixed(0)}',
-                                      style: const TextStyle(
-                                        color: Colors.deepOrange,
+                                      item.food.category,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
                                       ),
                                     ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      '৳${item.food.price.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        color: Colors.deepOrange,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
                                     Row(
                                       children: [
-                                        IconButton(
-                                          onPressed: () =>
-                                              onDecrease(item.food.id),
-                                          icon: const Icon(
-                                            Icons.remove_circle_outline,
+                                        _quantityButton(
+                                          Icons.remove,
+                                          () => onDecrease(item.food.id),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          child: Text(
+                                            '${item.quantity}',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
                                           ),
                                         ),
-                                        Text('${item.quantity}'),
-                                        IconButton(
-                                          onPressed: () =>
-                                              onIncrease(item.food.id),
-                                          icon: const Icon(
-                                            Icons.add_circle_outline,
-                                          ),
+                                        _quantityButton(
+                                          Icons.add,
+                                          () => onIncrease(item.food.id),
                                         ),
+                                        const Spacer(),
                                         IconButton(
+                                          visualDensity: VisualDensity.compact,
                                           tooltip: 'Remove item',
                                           onPressed: () =>
                                               onRemove(item.food.id),
                                           icon: const Icon(
                                             Icons.delete_outline,
-                                            color: Colors.red,
+                                            color: Colors.redAccent,
                                           ),
                                         ),
                                       ],
@@ -843,27 +1152,103 @@ class CartScreen extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.white,
-                  child: Column(
-                    children: [
-                      summaryRow('Subtotal', subtotal),
-                      summaryRow('Delivery Fee', 50),
-                      const Divider(),
-                      summaryRow('Total', subtotal + 50, bold: true),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: onCheckout,
-                          child: const Text('Proceed to Checkout'),
-                        ),
+                  padding: const EdgeInsets.fromLTRB(20, 17, 20, 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 14,
+                        offset: const Offset(0, -4),
                       ),
                     ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Subtotal'),
+                            Text('৳${subtotal.toStringAsFixed(0)}'),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Delivery Fee'),
+                            Text('৳${deliveryFee.toStringAsFixed(0)}'),
+                          ],
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10),
+                          child: Divider(),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Total Amount',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '৳${total.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.deepOrange,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 15),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: FilledButton.icon(
+                            onPressed: onCheckout,
+                            icon: const Icon(Icons.lock_outline),
+                            label: const Text(
+                              'Proceed to Checkout',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            style: FilledButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  static Widget _quantityButton(IconData icon, VoidCallback onPressed) {
+    return Material(
+      color: Colors.deepOrange.shade50,
+      borderRadius: BorderRadius.circular(9),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(9),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: Icon(icon, size: 17, color: Colors.deepOrange),
+        ),
+      ),
     );
   }
 }
@@ -889,9 +1274,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final nameController = TextEditingController();
   final phoneController = TextEditingController();
   final addressController = TextEditingController();
+  final couponController = TextEditingController();
+  final transactionIdController = TextEditingController();
 
   String paymentMethod = 'Cash on Delivery';
   bool isSubmitting = false;
+  bool isApplyingCoupon = false;
+  String? appliedCouponCode;
+  String? couponMessage;
+  double discountAmount = 0;
 
   @override
   void initState() {
@@ -902,17 +1293,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> loadCustomerProfile() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
-
       if (!mounted || !doc.exists) return;
       final data = doc.data();
       if (data == null) return;
-
       nameController.text = data['name']?.toString() ?? '';
       phoneController.text = data['phone']?.toString() ?? '';
       addressController.text = data['address']?.toString() ?? '';
@@ -925,29 +1313,118 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     0,
     (sum, item) => sum + item.food.price * item.quantity,
   );
-
   double get deliveryFee => 50;
-  double get total => subtotal + deliveryFee;
+  double get total =>
+      (subtotal - discountAmount).clamp(0, double.infinity).toDouble() +
+      deliveryFee;
+
+  double _number(dynamic value, [double fallback = 0]) =>
+      double.tryParse(value?.toString() ?? '') ?? fallback;
+
+  Future<double> _calculateCouponDiscount(String code) async {
+    final doc = await FirebaseFirestore.instance
+        .collection('coupons')
+        .doc(code)
+        .get();
+    if (!doc.exists || doc.data() == null)
+      throw Exception('Coupon code not found.');
+    final data = doc.data()!;
+    if (data['active'] != true) throw Exception('This coupon is inactive.');
+
+    final expiresAt = data['expiresAt'];
+    if (expiresAt is Timestamp && expiresAt.toDate().isBefore(DateTime.now())) {
+      throw Exception('This coupon has expired.');
+    }
+
+    final minimumOrder = _number(data['minOrder']);
+    if (subtotal < minimumOrder) {
+      throw Exception(
+        'Minimum order ৳${minimumOrder.toStringAsFixed(0)} required.',
+      );
+    }
+
+    final value = _number(data['discountValue']);
+    final type = (data['discountType'] ?? 'percent').toString().toLowerCase();
+    if (value <= 0) throw Exception('Invalid coupon configuration.');
+
+    double discount;
+    if (type == 'fixed') {
+      discount = value;
+    } else if (type == 'percent') {
+      discount = subtotal * value / 100;
+      final maxDiscount = _number(data['maxDiscount'], double.infinity);
+      if (maxDiscount.isFinite && maxDiscount > 0) {
+        discount = discount.clamp(0, maxDiscount);
+      }
+    } else {
+      throw Exception('Unsupported discount type.');
+    }
+    return discount.clamp(0, subtotal).toDouble();
+  }
+
+  Future<void> applyCoupon() async {
+    final code = couponController.text.trim().toUpperCase();
+    if (code.isEmpty) {
+      setState(() => couponMessage = 'Enter a coupon code.');
+      return;
+    }
+    setState(() => isApplyingCoupon = true);
+    try {
+      final discount = await _calculateCouponDiscount(code);
+      if (!mounted) return;
+      setState(() {
+        appliedCouponCode = code;
+        discountAmount = discount;
+        couponMessage =
+            'Coupon applied! You saved ৳${discount.toStringAsFixed(0)}.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        appliedCouponCode = null;
+        discountAmount = 0;
+        couponMessage = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      if (mounted) setState(() => isApplyingCoupon = false);
+    }
+  }
+
+  void removeCoupon() {
+    setState(() {
+      appliedCouponCode = null;
+      discountAmount = 0;
+      couponController.clear();
+      couponMessage = 'Coupon removed.';
+    });
+  }
 
   @override
   void dispose() {
     nameController.dispose();
     phoneController.dispose();
     addressController.dispose();
+    couponController.dispose();
+    transactionIdController.dispose();
     super.dispose();
   }
 
   Future<void> placeOrder() async {
-    if (isSubmitting) return;
-
-    if (!formKey.currentState!.validate()) return;
-
+    if (isSubmitting || !formKey.currentState!.validate()) return;
+    if ((paymentMethod == 'bKash' || paymentMethod == 'Nagad') &&
+        transactionIdController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your payment Transaction ID.'),
+        ),
+      );
+      return;
+    }
     if (widget.cart.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Your cart is empty.')));
       return;
     }
-
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -957,19 +1434,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     setState(() => isSubmitting = true);
-
     try {
-      final items = widget.cart.map((item) {
-        return <String, dynamic>{
-          'foodId': item.food.id,
-          'name': item.food.name,
-          'category': item.food.category,
-          'price': item.food.price,
-          'quantity': item.quantity,
-          'image': item.food.image,
-          'itemTotal': item.food.price * item.quantity,
-        };
-      }).toList();
+      // Re-check coupon immediately before placing the order.
+      var finalDiscount = 0.0;
+      if (appliedCouponCode != null) {
+        try {
+          finalDiscount = await _calculateCouponDiscount(appliedCouponCode!);
+        } catch (e) {
+          if (!mounted) return;
+          setState(() {
+            appliedCouponCode = null;
+            discountAmount = 0;
+            couponMessage =
+                'Coupon no longer valid. ${e.toString().replaceFirst('Exception: ', '')}';
+          });
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(couponMessage!)));
+          return;
+        }
+      }
+
+      final finalTotal =
+          (subtotal - finalDiscount).clamp(0, double.infinity).toDouble() +
+          deliveryFee;
+      final items = widget.cart
+          .map(
+            (item) => <String, dynamic>{
+              'foodId': item.food.id,
+              'name': item.food.name,
+              'category': item.food.category,
+              'price': item.food.price,
+              'quantity': item.quantity,
+              'image': item.food.image,
+              'itemTotal': item.food.price * item.quantity,
+            },
+          )
+          .toList();
 
       final orderData = <String, dynamic>{
         'userId': user.uid,
@@ -978,10 +1478,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'phone': phoneController.text.trim(),
         'address': addressController.text.trim(),
         'paymentMethod': paymentMethod,
+        'paymentStatus': paymentMethod == 'Cash on Delivery'
+            ? 'Cash on Delivery'
+            : (paymentMethod == 'Card Payment (Demo)'
+                  ? 'Demo Only'
+                  : 'Pending Verification'),
+        'transactionId': transactionIdController.text.trim(),
         'items': items,
         'subtotal': subtotal,
         'deliveryFee': deliveryFee,
-        'total': total,
+        'couponCode': appliedCouponCode ?? '',
+        'discount': finalDiscount,
+        'total': finalTotal,
         'status': 'Pending',
         'createdAt': FieldValue.serverTimestamp(),
       };
@@ -989,17 +1497,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final document = await FirebaseFirestore.instance
           .collection('orders')
           .add(orderData);
-
+      await NotificationService.createForUser(
+        userId: user.uid,
+        title: 'Order placed successfully',
+        message:
+            'Your order #${document.id.substring(0, document.id.length < 7 ? document.id.length : 7)} has been received.',
+        type: 'order_placed',
+        orderId: document.id,
+      );
       if (!mounted) return;
-
       final savedName = nameController.text.trim();
       final savedPhone = phoneController.text.trim();
       final savedAddress = addressController.text.trim();
       final savedPaymentMethod = paymentMethod;
-      final savedTotal = total;
-
       widget.onOrderPlaced();
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -1009,7 +1520,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             phone: savedPhone,
             address: savedAddress,
             paymentMethod: savedPaymentMethod,
-            total: savedTotal,
+            total: finalTotal,
           ),
         ),
         (route) => route.isFirst,
@@ -1049,12 +1560,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 prefixIcon: Icon(Icons.person_outline),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your name';
-                }
-                return null;
-              },
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Please enter your name'
+                  : null,
             ),
             const SizedBox(height: 14),
             TextFormField(
@@ -1068,9 +1576,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               validator: (value) {
                 final phone = value?.trim() ?? '';
                 if (phone.isEmpty) return 'Please enter your phone number';
-                if (phone.length < 8) {
+                if (phone.length < 8)
                   return 'Please enter a valid phone number';
-                }
                 return null;
               },
             ),
@@ -1084,12 +1591,77 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 prefixIcon: Icon(Icons.location_on_outlined),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your delivery address';
-                }
-                return null;
-              },
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Please enter your delivery address'
+                  : null,
+            ),
+            const SizedBox(height: 22),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFFFE2D4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Coupon & Discount',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: couponController,
+                          textCapitalization: TextCapitalization.characters,
+                          enabled:
+                              appliedCouponCode == null && !isApplyingCoupon,
+                          decoration: const InputDecoration(
+                            hintText: 'Enter coupon code',
+                            prefixIcon: Icon(Icons.local_offer_outlined),
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (appliedCouponCode == null)
+                        FilledButton(
+                          onPressed: isApplyingCoupon ? null : applyCoupon,
+                          child: isApplyingCoupon
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Apply'),
+                        )
+                      else
+                        IconButton(
+                          onPressed: removeCoupon,
+                          tooltip: 'Remove coupon',
+                          icon: const Icon(Icons.close, color: Colors.red),
+                        ),
+                    ],
+                  ),
+                  if (couponMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      couponMessage!,
+                      style: TextStyle(
+                        color: discountAmount > 0
+                            ? Colors.green
+                            : Colors.redAccent,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 22),
             const Text(
@@ -1107,10 +1679,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               },
             ),
             RadioListTile<String>(
-              value: 'Mobile Banking (Demo)',
+              value: 'bKash',
               groupValue: paymentMethod,
-              title: const Text('Mobile Banking (Demo)'),
-              secondary: const Icon(Icons.phone_android),
+              title: const Text('bKash (Manual verification)'),
+              secondary: const Icon(
+                Icons.phone_android,
+                color: Colors.deepPurple,
+              ),
+              onChanged: (value) {
+                if (value != null) setState(() => paymentMethod = value);
+              },
+            ),
+            RadioListTile<String>(
+              value: 'Nagad',
+              groupValue: paymentMethod,
+              title: const Text('Nagad (Manual verification)'),
+              secondary: const Icon(
+                Icons.account_balance_wallet_outlined,
+                color: Colors.deepOrange,
+              ),
               onChanged: (value) {
                 if (value != null) setState(() => paymentMethod = value);
               },
@@ -1118,16 +1705,43 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             RadioListTile<String>(
               value: 'Card Payment (Demo)',
               groupValue: paymentMethod,
-              title: const Text('Card Payment (Demo)'),
+              title: const Text('Card Payment (Demo only)'),
+              subtitle: const Text('No real card charge will be made.'),
               secondary: const Icon(Icons.credit_card),
               onChanged: (value) {
                 if (value != null) setState(() => paymentMethod = value);
               },
             ),
+            if (paymentMethod == 'bKash' || paymentMethod == 'Nagad') ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF1E8),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'Send ৳${total.toStringAsFixed(2)} to the official merchant number provided by the app owner. Then enter the transaction ID below. Do not enter your PIN or OTP. Payment will remain Pending Verification until the merchant verifies it.',
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: transactionIdController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Payment Transaction ID',
+                  hintText: 'Enter transaction ID',
+                  prefixIcon: Icon(Icons.receipt_long_outlined),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             const Divider(),
             summaryRow('Subtotal', subtotal),
             summaryRow('Delivery Fee', deliveryFee),
+            if (discountAmount > 0) summaryRow('Discount', -discountAmount),
             const Divider(),
             summaryRow('Total', total, bold: true),
             const SizedBox(height: 22),
@@ -1148,8 +1762,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Note: Mobile banking and card options are demo options. '
-              'They do not process real payments.',
+              'bKash/Nagad entries are submitted for manual verification. Card Payment is demo-only; no real payment is processed.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
@@ -1226,6 +1839,14 @@ class OrderConfirmationScreen extends StatelessWidget {
                   summaryTextRow('Phone', phone),
                   summaryTextRow('Address', address),
                   summaryTextRow('Payment', paymentMethod),
+                  summaryTextRow(
+                    'Payment Status',
+                    paymentMethod == 'Cash on Delivery'
+                        ? 'Cash on Delivery'
+                        : (paymentMethod == 'Card Payment (Demo)'
+                              ? 'Demo Only'
+                              : 'Pending Verification'),
+                  ),
                   const Divider(),
                   summaryTextRow(
                     'Total Amount',
@@ -1241,6 +1862,22 @@ class OrderConfirmationScreen extends StatelessWidget {
           SizedBox(
             height: 50,
             child: FilledButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrderTrackingScreen(orderId: orderId),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.local_shipping_outlined),
+              label: const Text('Track My Order'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 50,
+            child: OutlinedButton.icon(
               onPressed: () {
                 Navigator.of(context).popUntil((route) => route.isFirst);
               },

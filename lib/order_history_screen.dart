@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'order_tracking_screen.dart';
+
 class OrderHistoryScreen extends StatelessWidget {
   const OrderHistoryScreen({super.key});
 
@@ -13,9 +15,10 @@ class OrderHistoryScreen extends StatelessWidget {
     'Delivered',
   ];
 
-  int getStatusIndex(String status) {
-    return statuses.indexOf(status);
-  }
+  int getStatusIndex(String status) => statuses.indexOf(status);
+
+  double _number(dynamic value) =>
+      double.tryParse(value?.toString() ?? '') ?? 0.0;
 
   @override
   Widget build(BuildContext context) {
@@ -51,14 +54,16 @@ class OrderHistoryScreen extends StatelessWidget {
           }
 
           final orders = snapshot.data?.docs.toList() ?? [];
-
           orders.sort((a, b) {
-            final aTime = a.data()['createdAt'] as Timestamp?;
-            final bTime = b.data()['createdAt'] as Timestamp?;
-
-            return (bTime?.millisecondsSinceEpoch ?? 0).compareTo(
-              aTime?.millisecondsSinceEpoch ?? 0,
-            );
+            final aTime = a.data()['createdAt'];
+            final bTime = b.data()['createdAt'];
+            final aMillis = aTime is Timestamp
+                ? aTime.millisecondsSinceEpoch
+                : 0;
+            final bMillis = bTime is Timestamp
+                ? bTime.millisecondsSinceEpoch
+                : 0;
+            return bMillis.compareTo(aMillis);
           });
 
           if (orders.isEmpty) {
@@ -80,20 +85,22 @@ class OrderHistoryScreen extends StatelessWidget {
             itemBuilder: (context, index) {
               final doc = orders[index];
               final order = doc.data();
-
               final status = order['status']?.toString() ?? 'Pending';
-
-              final total = (order['total'] as num?)?.toDouble() ?? 0;
-
-              final items = (order['items'] as List<dynamic>?) ?? [];
-
+              final total = _number(order['total']);
+              final rawItems = order['items'];
+              final items = rawItems is List ? rawItems : <dynamic>[];
               final isCancelled = status == 'Cancelled';
               final currentIndex = getStatusIndex(status);
-
-              final createdAt = order['createdAt'] as Timestamp?;
+              final createdAt = order['createdAt'];
+              final shortId = doc.id.length > 6
+                  ? doc.id.substring(0, 6)
+                  : doc.id;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -108,7 +115,7 @@ class OrderHistoryScreen extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Order #${doc.id.substring(0, 6)}',
+                              'Order #$shortId',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -124,33 +131,27 @@ class OrderHistoryScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-
-                      if (createdAt != null) ...[
+                      if (createdAt is Timestamp) ...[
                         const SizedBox(height: 8),
                         Text('Date: ${createdAt.toDate().toLocal()}'),
                       ],
-
                       const Divider(height: 24),
-
                       const Text(
                         'Order Items',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-
                       ...items.map((rawItem) {
-                        final item = Map<String, dynamic>.from(rawItem as Map);
-
+                        final item = rawItem is Map
+                            ? Map<String, dynamic>.from(rawItem)
+                            : <String, dynamic>{};
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Text(
-                            '${item['name'] ?? 'Food'} × '
-                            '${item['quantity'] ?? 0}',
+                            '${item['name'] ?? 'Food'} × ${item['quantity'] ?? 0}',
                           ),
                         );
                       }),
-
                       const SizedBox(height: 16),
-
                       const Text(
                         'Order Tracking',
                         style: TextStyle(
@@ -158,9 +159,7 @@ class OrderHistoryScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       if (isCancelled)
                         const ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -184,15 +183,13 @@ class OrderHistoryScreen extends StatelessWidget {
                         ...List.generate(statuses.length, (step) {
                           final completed = step <= currentIndex;
                           final isCurrent = step == currentIndex;
-
-                          final icons = [
+                          const icons = [
                             Icons.receipt_long,
                             Icons.check_circle_outline,
                             Icons.restaurant,
                             Icons.delivery_dining,
                             Icons.task_alt,
                           ];
-
                           return Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -243,10 +240,24 @@ class OrderHistoryScreen extends StatelessWidget {
                             ],
                           );
                         }),
-
                       const SizedBox(height: 12),
-
                       Text('Payment: ${order['paymentMethod'] ?? 'N/A'}'),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.local_shipping_outlined),
+                          label: const Text('View Live Tracking'),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    OrderTrackingScreen(orderId: doc.id),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
